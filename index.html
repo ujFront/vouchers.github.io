@@ -38,7 +38,7 @@
         /* Enhanced Hero Section combining both designs */
         .hero-section {
             position: relative;
-            background: linear-gradient(135deg, var(--bs-primary) 0%, #cf6e00 100%);
+            background: linear-gradient(135deg, var(--bs-accent-dark) 0%, var(--bs-primary) 100%);
             color: white;
             padding: 3rem 0 2rem;
             margin-bottom: 0;
@@ -1192,10 +1192,9 @@
         function loadVoucherData() {
             const urlParams = new URLSearchParams(window.location.search);
             const promoId = urlParams.get('promoID');
-            const forceDefault = urlParams.get('default'); // For testing: ?default=true
             
-            if (!promoId || forceDefault === 'true') {
-                // No promoID provided or forced default - fallback to first available voucher type
+            if (!promoId) {
+                // No promoID provided - fallback to first available voucher type
                 loadDefaultVoucherType();
                 return;
             }
@@ -1204,19 +1203,12 @@
             loadVoucherDataByPromoId(promoId);
         }
         
-        // Global function for testing default mode from console
-        window.testDefaultMode = function() {
-            console.log('Testing default voucher mode...');
-            loadDefaultVoucherType();
-        };
         
         // Load default voucher type (first available)
         function loadDefaultVoucherType() {
             showLoading();
             
             // Call API to get first available voucher type
-            // NOTE: Backend needs to implement 'getDefaultCustomerVoucherData' action
-            // This should return the first voucher type where availability = 'both' or 'online_only'
             const apiUrl = `${CONFIG.API_BASE_URL}?action=getDefaultCustomerVoucherData`;
             
             fetch(apiUrl, {
@@ -1322,10 +1314,6 @@
             displayPurchaseLimit();
             displayTermsAndConditions();
             
-            // Show default voucher notice if applicable
-            if (isDefault) {
-                showDefaultVoucherNotice();
-            }
             
             // Show main content
             document.getElementById('voucher-content').style.display = 'block';
@@ -1346,45 +1334,18 @@
                     
                     <div class="contact-info mb-4">
                         <div class="mb-2"><strong>📞 Phone:</strong> (08) 6397 0411</div>
-                        <div class="mb-2"><strong>📧 Email:</strong> admin@urbanjungleirc.com</div>
+                        <div class="mb-2"><strong>📧 Email:</strong> frontdesk@urbanjungleirc.com</div>
                         <div class="mb-2"><strong>🏢 Visit:</strong> 83 Solomon Rd, Jandakot WA 6164</div>
                     </div>
                     
                     <p class="text-muted">We apologize for any inconvenience.</p>
                     
-                    <div class="mt-4">
-                        <a href="https://urbanjungleirc.com" class="btn btn-primary btn-lg me-2">
-                            <i class="bi bi-house"></i> Visit Our Website
-                        </a>
-                        <button class="btn btn-outline-primary btn-lg" onclick="location.reload()">
-                            <i class="bi bi-arrow-clockwise"></i> Try Again
-                        </button>
-                    </div>
                 </div>
             `;
             
             showErrorHtml(errorMessageHtml);
         }
         
-        // Show notice when displaying default voucher
-        function showDefaultVoucherNotice() {
-            // Create a friendly notice that this is the default voucher selection
-            const noticeHtml = `
-                <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
-                    <i class="bi bi-info-circle flex-shrink-0 me-3 fs-4"></i>
-                    <div>
-                        <h6 class="alert-heading mb-1">Default Voucher Selection</h6>
-                        <small class="mb-0">You're viewing our general gift vouchers. For specific promotional offers, please use the direct link provided to you.</small>
-                    </div>
-                </div>
-            `;
-            
-            // Insert notice at the top of voucher content
-            const voucherContent = document.getElementById('voucher-content');
-            if (voucherContent) {
-                voucherContent.insertAdjacentHTML('afterbegin', noticeHtml);
-            }
-        }
         
         // Handle voucher data loading error
         function handleVoucherDataError(error) {
