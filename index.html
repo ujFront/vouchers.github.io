@@ -503,7 +503,7 @@
         
         /* Terms Section */
         .terms-section {
-            background: white;
+            /* background: white; */
             border-radius: 25px;
             padding: 2.5rem;
             box-shadow: 0 15px 35px rgba(0,0,0,0.08);
@@ -650,12 +650,12 @@
         }
         
         ::-webkit-scrollbar-thumb {
-            background: var(--bs-primary);
+            background: var(--bs-secondary);
             border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
-            background: var(--bs-secondary);
+            background: var(--bs-accent-dark);
         }
     </style>
 </head>
@@ -985,11 +985,11 @@
             <h4><i class="bi bi-check-circle"></i> Purchase Successful!</h4>
             <p>Thank you for your purchase! Your voucher will be sent to your email address <span id="success-email"></span> <strong>within 15 minutes</strong>.</p>
             <div class="mt-3">
-                <button class="btn btn-success btn-lg me-2" onclick="location.href='https://urbanjungleirc.com'">
-                    <i class="bi bi-house"></i> Back to Home
-                </button>
-                <button class="btn btn-outline-success btn-lg" onclick="location.reload()">
+                <button class="btn btn-success btn-lg" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i> Purchase Another
+                </button>
+                <button class="btn btn-lg me-2" onclick="location.href='https://urbanjungleirc.com'">
+                    <i class="bi bi-house"></i> Back to Home
                 </button>
             </div>
         </div>
@@ -1914,41 +1914,41 @@
             }, 30000);
             
             
-            // Encode purchase data as URL parameters
-            const encodedData = encodeURIComponent(JSON.stringify(purchaseData));
-            const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
+            // Create essential purchase data for JSONP (remove large fields to stay under URL limits)
+            const essentialData = {
+                voucherType: {
+                    type_id: voucherType.type_id,
+                    promo_id: voucherType.promo_id
+                },
+                voucherItem: {
+                    id: selectedItem.id,
+                    name: selectedItem.name,
+                    value: selectedItem.value
+                },
+                customer: {
+                    name: customerData.name,
+                    email: customerData.email,
+                    phone: customerData.phone,
+                    gift_recipient: customerData.giftRecipient,
+                    gift_message: customerData.giftMessage
+                },
+                payment: {
+                    id: paymentDetails.id || paymentDetails.orderID,
+                    orderID: paymentDetails.orderID || paymentDetails.id
+                },
+                promoId: new URLSearchParams(window.location.search).get('promoID')
+            };
             
+            // Encode essential data as URL parameters
+            const encodedData = encodeURIComponent(JSON.stringify(essentialData));
+            const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
                 hideProcessingSpinner();
                 
                 if (error) {
-                    
-                    // Fallback to regular fetch
-                    fetch(`${CONFIG.API_BASE_URL}`, {
-                        method: 'POST',
-                        mode: 'cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            action: 'processCustomerPurchase',
-                            data: purchaseData
-                        })
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                        }
-                        return response.json();
-                    })
-                    .then(result => {
-                        handlePurchaseSuccess(result);
-                    })
-                    .catch(fallbackError => {
-                        handlePurchaseError(fallbackError);
-                    });
+                    handlePurchaseError(new Error('Purchase request failed: ' + error.message));
                 } else {
                     handlePurchaseSuccess(result);
                 }
