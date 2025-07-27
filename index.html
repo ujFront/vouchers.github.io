@@ -1021,8 +1021,7 @@
                     </div>
                     
                     <small>83 Solomon Rd, Jandakot WA 6164 | (08) 6397 0411 | <a href="mailto:admin@urbanjungleirc.com" style="color: #bbb;">admin@urbanjungleirc.com</a></small>
-                    <p class="my-0">
-                        <small>v04</small>
+                    <p class="my-0 text-muted"><small>v05</small></p>
                 </div>
             </div>
         </div>
@@ -1966,7 +1965,6 @@
             
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
-                hideProcessingSpinner();
                 
                 if (error) {
                     
@@ -1994,6 +1992,7 @@
                             // Try without callback (direct JSON)
                             try {
                                 const result = JSON.parse(text);
+                                hideProcessingSpinner();
                                 handlePurchaseSuccess(result);
                                 return;
                             } catch (e) {
@@ -2003,6 +2002,7 @@
                         if (match) {
                             try {
                                 const result = JSON.parse(match[2]);
+                                hideProcessingSpinner();
                                 handlePurchaseSuccess(result);
                             } catch (parseError) {
                                 throw parseError;
@@ -2012,9 +2012,11 @@
                         }
                     })
                     .catch(fetchError => {
+                        hideProcessingSpinner();
                         handlePurchaseError(new Error('Purchase request failed: ' + fetchError.message));
                     });
                 } else {
+                    hideProcessingSpinner();
                     handlePurchaseSuccess(result);
                 }
             });
