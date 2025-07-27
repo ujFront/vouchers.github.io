@@ -1208,15 +1208,43 @@
         function loadDefaultVoucherType() {
             showLoading();
             
-            // Use JSONP to avoid CORS issues with Google Apps Script
+            // Call API to get first available voucher type
             const apiUrl = `${CONFIG.API_BASE_URL}?action=getDefaultCustomerVoucherData`;
             
-            jsonpRequest(apiUrl, function(error, data) {
-                if (error) {
-                    handleDefaultVoucherError(error);
-                } else {
-                    handleVoucherDataSuccess(data, true); // true indicates this is default fallback
+            fetch(apiUrl, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json',
                 }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.text();
+            })
+            .then(text => {
+                // Handle JSONP response (extract JSON from callback)
+                if (text.startsWith('callback(')) {
+                    const jsonStart = text.indexOf('(') + 1;
+                    const jsonEnd = text.lastIndexOf(')');
+                    const jsonString = text.substring(jsonStart, jsonEnd);
+                    const data = JSON.parse(jsonString);
+                    handleVoucherDataSuccess(data, true); // true indicates this is default fallback
+                } else {
+                    // Try to parse as regular JSON
+                    try {
+                        const data = JSON.parse(text);
+                        handleVoucherDataSuccess(data, true); // true indicates this is default fallback
+                    } catch (e) {
+                        handleVoucherDataError(new Error('Invalid response format'));
+                    }
+                }
+            })
+            .catch(error => {
+                // If default API fails, show user-friendly error
+                handleDefaultVoucherError(error);
             });
         }
         
@@ -1224,15 +1252,42 @@
         function loadVoucherDataByPromoId(promoId) {
             showLoading();
             
-            // Use JSONP to avoid CORS issues with Google Apps Script
+            // Call Google Apps Script API - using same approach as working test-api.html
             const apiUrl = `${CONFIG.API_BASE_URL}?action=getCustomerVoucherData&promoId=${promoId}`;
             
-            jsonpRequest(apiUrl, function(error, data) {
-                if (error) {
-                    handleVoucherDataError(error);
-                } else {
-                    handleVoucherDataSuccess(data, false); // false indicates this is specific promo
+            fetch(apiUrl, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json',
                 }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.text();
+            })
+            .then(text => {
+                // Handle JSONP response (extract JSON from callback)
+                if (text.startsWith('callback(')) {
+                    const jsonStart = text.indexOf('(') + 1;
+                    const jsonEnd = text.lastIndexOf(')');
+                    const jsonString = text.substring(jsonStart, jsonEnd);
+                    const data = JSON.parse(jsonString);
+                    handleVoucherDataSuccess(data, false); // false indicates this is specific promo
+                } else {
+                    // Try to parse as regular JSON
+                    try {
+                        const data = JSON.parse(text);
+                        handleVoucherDataSuccess(data, false); // false indicates this is specific promo
+                    } catch (e) {
+                        handleVoucherDataError(new Error('Invalid response format'));
+                    }
+                }
+            })
+            .catch(error => {
+                handleVoucherDataError(error);
             });
         }
         
