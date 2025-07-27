@@ -1964,22 +1964,50 @@
                 promoId: new URLSearchParams(window.location.search).get('promoID')
             };
             
-            // Encode essential data as URL parameters
+            console.log('Purchase data being sent:', essentialData);
+            
+            // Encode essential data as URL parameters for JSONP
             const encodedData = encodeURIComponent(JSON.stringify(essentialData));
             const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
-            console.log('Purchase data being sent:', essentialData);
-            console.log('Final JSONP URL length:', jsonpUrl.length);
+            console.log('JSONP URL length:', jsonpUrl.length);
             
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
                 hideProcessingSpinner();
                 
                 if (error) {
-                    console.error('Purchase JSONP error:', error);
-                    handlePurchaseError(new Error('Purchase request failed: ' + error.message));
+                    console.error('JSONP failed, trying GET request:', error);
+                    
+                    // Fallback to GET request without script loading (avoids CSP issues)
+                    fetch(jsonpUrl, {
+                        method: 'GET',
+                        mode: 'cors',
+                        credentials: 'omit'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        return response.text();
+                    })
+                    .then(text => {
+                        // Parse JSONP response manually
+                        const match = text.match(/jsonpCallback_\d+\((.*)\);?$/);
+                        if (match) {
+                            const result = JSON.parse(match[1]);
+                            console.log('GET fallback success:', result);
+                            handlePurchaseSuccess(result);
+                        } else {
+                            throw new Error('Invalid JSONP response format');
+                        }
+                    })
+                    .catch(fetchError => {
+                        console.error('GET fallback also failed:', fetchError);
+                        handlePurchaseError(new Error('Purchase request failed: ' + fetchError.message));
+                    });
                 } else {
-                    console.log('Purchase success result:', result);
+                    console.log('JSONP success:', result);
                     handlePurchaseSuccess(result);
                 }
             });
