@@ -1153,36 +1153,61 @@
             }
         }
         
-        // JSONP helper function for cross-origin requests (simplified approach)
+        // JSONP helper function for cross-origin requests with enhanced debugging
         function jsonpRequest(url, callback) {
-            // Use a fixed callback name like your working livescore project
-            const callbackName = 'jsonpCallback';
+            // Use a unique callback name to avoid conflicts
+            const callbackName = 'jsonpCallback_' + Date.now();
             
             // Create the URL with callback parameter
             const scriptUrl = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+            
+            // Debug: Check URL length
+            console.log('JSONP URL length:', scriptUrl.length);
+            if (scriptUrl.length > 2000) {
+                console.warn('JSONP URL might be too long:', scriptUrl.length);
+            }
             
             // Create script element
             const script = document.createElement('script');
             script.src = scriptUrl;
             script.async = true;
             
+            // Add timeout protection for JSONP
+            const timeoutId = setTimeout(function() {
+                console.error('JSONP request timed out');
+                callback(new Error('JSONP request timed out'));
+                // Clean up
+                if (document.head.contains(script)) {
+                    document.head.removeChild(script);
+                }
+                delete window[callbackName];
+            }, 10000); // 10 second timeout
+            
             // Set up global callback
             window[callbackName] = function(data) {
+                clearTimeout(timeoutId);
+                console.log('JSONP success:', data);
                 callback(null, data);
-                // Clean up
-                document.head.removeChild(script);
-                delete window[callbackName];
-            };
-            
-            // Handle script loading errors
-            script.onerror = function() {
-                callback(new Error('JSONP request failed'));
                 // Clean up
                 if (document.head.contains(script)) {
                     document.head.removeChild(script);
                 }
                 delete window[callbackName];
             };
+            
+            // Handle script loading errors
+            script.onerror = function(error) {
+                clearTimeout(timeoutId);
+                console.error('JSONP script load error:', error);
+                callback(new Error('JSONP script load failed'));
+                // Clean up
+                if (document.head.contains(script)) {
+                    document.head.removeChild(script);
+                }
+                delete window[callbackName];
+            };
+            
+            console.log('JSONP request starting:', scriptUrl.substring(0, 200) + '...');
             
             // Add script to head to trigger request
             document.head.appendChild(script);
@@ -1943,13 +1968,18 @@
             const encodedData = encodeURIComponent(JSON.stringify(essentialData));
             const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
+            console.log('Purchase data being sent:', essentialData);
+            console.log('Final JSONP URL length:', jsonpUrl.length);
+            
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
                 hideProcessingSpinner();
                 
                 if (error) {
+                    console.error('Purchase JSONP error:', error);
                     handlePurchaseError(new Error('Purchase request failed: ' + error.message));
                 } else {
+                    console.log('Purchase success result:', result);
                     handlePurchaseSuccess(result);
                 }
             });
