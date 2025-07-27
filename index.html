@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Urban Jungle - Gift Vouchers</title>
+    <title>Urban Jungle - Gift Vouchers 01</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23e74c3c'/%3E%3Ctext x='50' y='65' font-family='Arial' font-size='60' font-weight='bold' text-anchor='middle' fill='white'%3EUJ%3C/text%3E%3C/svg%3E">
@@ -1992,14 +1992,33 @@
                         return response.text();
                     })
                     .then(text => {
-                        // Parse JSONP response manually
-                        const match = text.match(/jsonpCallback_\d+\((.*)\);?$/);
+                        console.log('GET response received:', text.substring(0, 300) + '...');
+                        
+                        // Try multiple JSONP response patterns
+                        let match = text.match(/jsonpCallback_\d+\((.*)\);?$/);
+                        if (!match) {
+                            // Try generic callback pattern
+                            match = text.match(/(\w+)\((.*)\);?$/);
+                        }
+                        if (!match) {
+                            // Try without callback (direct JSON)
+                            try {
+                                const result = JSON.parse(text);
+                                console.log('Direct JSON fallback success:', result);
+                                handlePurchaseSuccess(result);
+                                return;
+                            } catch (e) {
+                                console.log('Direct JSON parse failed:', e);
+                            }
+                        }
+                        
                         if (match) {
                             const result = JSON.parse(match[1]);
-                            console.log('GET fallback success:', result);
+                            console.log('JSONP fallback success:', result);
                             handlePurchaseSuccess(result);
                         } else {
-                            throw new Error('Invalid JSONP response format');
+                            console.error('Response format not recognized:', text.substring(0, 500));
+                            throw new Error('Invalid response format - see console for details');
                         }
                     })
                     .catch(fetchError => {
