@@ -503,7 +503,7 @@
         
         /* Terms Section */
         .terms-section {
-            background: white;
+            /* background: white; */
             border-radius: 25px;
             padding: 2.5rem;
             box-shadow: 0 15px 35px rgba(0,0,0,0.08);
@@ -650,12 +650,12 @@
         }
         
         ::-webkit-scrollbar-thumb {
-            background: var(--bs-primary);
+            background: var(--bs-secondary);
             border-radius: 4px;
         }
         
         ::-webkit-scrollbar-thumb:hover {
-            background: var(--bs-secondary);
+            background: var(--bs-accent-dark);
         }
     </style>
 </head>
@@ -985,11 +985,11 @@
             <h4><i class="bi bi-check-circle"></i> Purchase Successful!</h4>
             <p>Thank you for your purchase! Your voucher will be sent to your email address <span id="success-email"></span> <strong>within 15 minutes</strong>.</p>
             <div class="mt-3">
-                <button class="btn btn-success btn-lg me-2" onclick="location.href='https://urbanjungleirc.com'">
-                    <i class="bi bi-house"></i> Back to Home
-                </button>
-                <button class="btn btn-outline-success btn-lg" onclick="location.reload()">
+                <button class="btn btn-success btn-lg" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i> Purchase Another
+                </button>
+                <button class="btn btn-lg me-2" onclick="location.href='https://urbanjungleirc.com'">
+                    <i class="bi bi-house"></i> Back to Home
                 </button>
             </div>
         </div>
@@ -1153,36 +1153,61 @@
             }
         }
         
-        // JSONP helper function for cross-origin requests (simplified approach)
+        // JSONP helper function for cross-origin requests with enhanced debugging
         function jsonpRequest(url, callback) {
-            // Use a fixed callback name like your working livescore project
-            const callbackName = 'jsonpCallback';
+            // Use a unique callback name to avoid conflicts
+            const callbackName = 'jsonpCallback_' + Date.now();
             
             // Create the URL with callback parameter
             const scriptUrl = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+            
+            // Debug: Check URL length
+            console.log('JSONP URL length:', scriptUrl.length);
+            if (scriptUrl.length > 2000) {
+                console.warn('JSONP URL might be too long:', scriptUrl.length);
+            }
             
             // Create script element
             const script = document.createElement('script');
             script.src = scriptUrl;
             script.async = true;
             
+            // Add timeout protection for JSONP
+            const timeoutId = setTimeout(function() {
+                console.error('JSONP request timed out');
+                callback(new Error('JSONP request timed out'));
+                // Clean up
+                if (document.head.contains(script)) {
+                    document.head.removeChild(script);
+                }
+                delete window[callbackName];
+            }, 10000); // 10 second timeout
+            
             // Set up global callback
             window[callbackName] = function(data) {
+                clearTimeout(timeoutId);
+                console.log('JSONP success:', data);
                 callback(null, data);
-                // Clean up
-                document.head.removeChild(script);
-                delete window[callbackName];
-            };
-            
-            // Handle script loading errors
-            script.onerror = function() {
-                callback(new Error('JSONP request failed'));
                 // Clean up
                 if (document.head.contains(script)) {
                     document.head.removeChild(script);
                 }
                 delete window[callbackName];
             };
+            
+            // Handle script loading errors
+            script.onerror = function(error) {
+                clearTimeout(timeoutId);
+                console.error('JSONP script load error:', error);
+                callback(new Error('JSONP script load failed'));
+                // Clean up
+                if (document.head.contains(script)) {
+                    document.head.removeChild(script);
+                }
+                delete window[callbackName];
+            };
+            
+            console.log('JSONP request starting:', scriptUrl.substring(0, 200) + '...');
             
             // Add script to head to trigger request
             document.head.appendChild(script);
@@ -1914,42 +1939,75 @@
             }, 30000);
             
             
-            // Encode purchase data as URL parameters
-            const encodedData = encodeURIComponent(JSON.stringify(purchaseData));
+            // Create essential purchase data for JSONP (remove large fields to stay under URL limits)
+            const essentialData = {
+                voucherType: {
+                    type_id: voucherType.type_id,
+                    promo_id: voucherType.promo_id
+                },
+                voucherItem: {
+                    id: selectedItem.id,
+                    name: selectedItem.name,
+                    value: selectedItem.value
+                },
+                customer: {
+                    name: customerData.name,
+                    email: customerData.email,
+                    phone: customerData.phone,
+                    gift_recipient: customerData.giftRecipient,
+                    gift_message: customerData.giftMessage
+                },
+                payment: {
+                    id: paymentDetails.id || paymentDetails.orderID,
+                    orderID: paymentDetails.orderID || paymentDetails.id
+                },
+                promoId: new URLSearchParams(window.location.search).get('promoID')
+            };
+            
+            console.log('Purchase data being sent:', essentialData);
+            
+            // Encode essential data as URL parameters for JSONP
+            const encodedData = encodeURIComponent(JSON.stringify(essentialData));
             const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
+            console.log('JSONP URL length:', jsonpUrl.length);
             
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
                 hideProcessingSpinner();
                 
                 if (error) {
+                    console.error('JSONP failed, trying GET request:', error);
                     
-                    // Fallback to regular fetch
-                    fetch(`${CONFIG.API_BASE_URL}`, {
-                        method: 'POST',
+                    // Fallback to GET request without script loading (avoids CSP issues)
+                    fetch(jsonpUrl, {
+                        method: 'GET',
                         mode: 'cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            action: 'processCustomerPurchase',
-                            data: purchaseData
-                        })
+                        credentials: 'omit'
                     })
                     .then(response => {
                         if (!response.ok) {
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         }
-                        return response.json();
+                        return response.text();
                     })
-                    .then(result => {
-                        handlePurchaseSuccess(result);
+                    .then(text => {
+                        // Parse JSONP response manually
+                        const match = text.match(/jsonpCallback_\d+\((.*)\);?$/);
+                        if (match) {
+                            const result = JSON.parse(match[1]);
+                            console.log('GET fallback success:', result);
+                            handlePurchaseSuccess(result);
+                        } else {
+                            throw new Error('Invalid JSONP response format');
+                        }
                     })
-                    .catch(fallbackError => {
-                        handlePurchaseError(fallbackError);
+                    .catch(fetchError => {
+                        console.error('GET fallback also failed:', fetchError);
+                        handlePurchaseError(new Error('Purchase request failed: ' + fetchError.message));
                     });
                 } else {
+                    console.log('JSONP success:', result);
                     handlePurchaseSuccess(result);
                 }
             });
