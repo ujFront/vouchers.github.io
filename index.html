@@ -1022,7 +1022,7 @@
                     
                     <small>83 Solomon Rd, Jandakot WA 6164 | (08) 6397 0411 | <a href="mailto:admin@urbanjungleirc.com" style="color: #bbb;">admin@urbanjungleirc.com</a></small>
                     <p class="my-0">
-                        <small>v03</small>
+                        <small>v04</small>
                 </div>
             </div>
         </div>
@@ -1163,11 +1163,6 @@
             // Create the URL with callback parameter
             const scriptUrl = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
             
-            // Debug: Check URL length
-            console.log('JSONP URL length:', scriptUrl.length);
-            if (scriptUrl.length > 2000) {
-                console.warn('JSONP URL might be too long:', scriptUrl.length);
-            }
             
             // Create script element
             const script = document.createElement('script');
@@ -1176,7 +1171,6 @@
             
             // Add timeout protection for JSONP
             const timeoutId = setTimeout(function() {
-                console.error('JSONP request timed out');
                 callback(new Error('JSONP request timed out'));
                 // Clean up
                 if (document.head.contains(script)) {
@@ -1200,7 +1194,6 @@
             // Handle script loading errors
             script.onerror = function(error) {
                 clearTimeout(timeoutId);
-                console.error('JSONP script load error:', error);
                 callback(new Error('JSONP script load failed'));
                 // Clean up
                 if (document.head.contains(script)) {
@@ -1209,7 +1202,6 @@
                 delete window[callbackName];
             };
             
-            console.log('JSONP request starting:', scriptUrl.substring(0, 200) + '...');
             
             // Add script to head to trigger request
             document.head.appendChild(script);
@@ -1966,20 +1958,17 @@
                 promoId: new URLSearchParams(window.location.search).get('promoID')
             };
             
-            console.log('Purchase data being sent:', essentialData);
             
             // Encode essential data as URL parameters for JSONP
             const encodedData = encodeURIComponent(JSON.stringify(essentialData));
             const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
-            console.log('JSONP URL length:', jsonpUrl.length);
             
             jsonpRequest(jsonpUrl, function(error, result) {
                 clearTimeout(timeoutId);
                 hideProcessingSpinner();
                 
                 if (error) {
-                    console.error('JSONP failed, trying GET request:', error);
                     
                     // Fallback to GET request without script loading (avoids CSP issues)
                     fetch(jsonpUrl, {
@@ -1994,7 +1983,6 @@
                         return response.text();
                     })
                     .then(text => {
-                        console.log('GET response received:', text.substring(0, 300) + '...');
                         
                         // Try multiple JSONP response patterns
                         let match = text.match(/(\w+)\((.*)\);?$/); // Generic callback pattern first
@@ -2006,35 +1994,27 @@
                             // Try without callback (direct JSON)
                             try {
                                 const result = JSON.parse(text);
-                                console.log('Direct JSON fallback success:', result);
                                 handlePurchaseSuccess(result);
                                 return;
                             } catch (e) {
-                                console.log('Direct JSON parse failed:', e);
                             }
                         }
                         
                         if (match) {
-                            console.log('Regex match found:', match[0], 'JSON part:', match[2]);
                             try {
                                 const result = JSON.parse(match[2]);
-                                console.log('JSONP fallback success:', result);
                                 handlePurchaseSuccess(result);
                             } catch (parseError) {
-                                console.error('JSON parse error for match:', match[2]);
                                 throw parseError;
                             }
                         } else {
-                            console.error('Response format not recognized:', text.substring(0, 500));
                             throw new Error('Invalid response format - see console for details');
                         }
                     })
                     .catch(fetchError => {
-                        console.error('GET fallback also failed:', fetchError);
                         handlePurchaseError(new Error('Purchase request failed: ' + fetchError.message));
                     });
                 } else {
-                    console.log('JSONP success:', result);
                     handlePurchaseSuccess(result);
                 }
             });
