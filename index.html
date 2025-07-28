@@ -917,21 +917,24 @@
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Gift Information Row -->
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label for="customer-phone" class="form-label">Phone Number</label>
-                                            <input type="tel" class="form-control" id="customer-phone">
-                                            <div class="form-validation-feedback" id="customer-phone-feedback"></div>
+                                            <label for="gift-from" class="form-label">Gift From (optional)</label>
+                                            <input type="text" class="form-control" id="gift-from" placeholder="e.g., Mum & Dad, The Smith Family" maxlength="80">
+                                            <div class="form-text">Who is giving this gift? (max 80 characters)</div>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label for="gift-recipient" class="form-label">Gift Recipient (optional)</label>
-                                            <input type="text" class="form-control" id="gift-recipient" placeholder="If this is a gift for someone else">
+                                            <label for="gift-recipient" class="form-label">Gift To (optional)</label>
+                                            <input type="text" class="form-control" id="gift-recipient" placeholder="Recipient's name" maxlength="80">
+                                            <div class="form-text">Who is receiving this gift? (max 80 characters)</div>
                                         </div>
                                     </div>
                                 </div>
+                                <!-- Gift Message Row -->
                                 <div class="mb-3">
                                     <label for="gift-message" class="form-label">Gift Message (optional)</label>
                                     <textarea class="form-control" id="gift-message" rows="3" placeholder="Add a personal message..." maxlength="170"></textarea>
@@ -1021,7 +1024,7 @@
                     </div>
                     
                     <small>83 Solomon Rd, Jandakot WA 6164 | (08) 6397 0411 | <a href="mailto:admin@urbanjungleirc.com" style="color: #bbb;">admin@urbanjungleirc.com</a></small>
-                    <p class="my-0"><small>3.22.4 - i06</small></p>
+                    <p class="my-0"><small>3.22.4 - i07</small></p>
                 </div>
             </div>
         </div>
@@ -1078,6 +1081,21 @@
             modal.show();
         }
         
+        // Bootstrap Alert Function with HTML support
+        function showBootstrapAlertHtml(htmlMessage, title = 'Alert', type = 'warning') {
+            const alertModal = document.getElementById('alertModal');
+            const alertTitle = document.getElementById('alertModalLabel');
+            const alertMessage = document.getElementById('alertModalMessage');
+            
+            // Update modal content
+            alertTitle.innerHTML = `<i class="bi bi-${type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i> ${title}`;
+            alertMessage.innerHTML = htmlMessage;
+            
+            // Show modal
+            const modal = new bootstrap.Modal(alertModal);
+            modal.show();
+        }
+        
         // Configuration is loaded from config.js
         // Ensure CONFIG is available
         
@@ -1100,8 +1118,8 @@
             customerForm: null,
             customerName: null,
             customerEmail: null,
-            customerPhone: null,
             giftRecipient: null,
+            giftFrom: null,
             giftMessage: null,
             successMessage: null,
             successEmail: null,
@@ -1119,8 +1137,8 @@
                 this.customerForm = document.getElementById('customer-form');
                 this.customerName = document.getElementById('customer-name');
                 this.customerEmail = document.getElementById('customer-email');
-                this.customerPhone = document.getElementById('customer-phone');
                 this.giftRecipient = document.getElementById('gift-recipient');
+                this.giftFrom = document.getElementById('gift-from');
                 this.giftMessage = document.getElementById('gift-message');
                 this.successMessage = document.querySelector('.success-message');
                 this.successEmail = document.getElementById('success-email');
@@ -1850,12 +1868,27 @@
                 createOrder: function(data, actions) {
                     if (!selectedItem) {
                         showBootstrapAlert('Please select a voucher option before proceeding with payment.', 'Selection Required', 'warning');
-                        return;
+                        return Promise.reject('No voucher selected');
                     }
                     
                     if (!validateForm()) {
-                        showBootstrapAlert('Please fill in all required fields correctly before proceeding.', 'Form Validation', 'warning');
-                        return;
+                        // Get specific validation errors for better user experience
+                        const nameValid = DOM.customerName.value.trim();
+                        const emailValid = DOM.customerEmail.value.trim();
+                        
+                        let missingFields = [];
+                        if (!nameValid) missingFields.push('Full Name');
+                        if (!emailValid) missingFields.push('Email Address');
+                        
+                        const messageHtml = `
+                            <p>Please complete the required fields:</p>
+                            <ul class="text-start">
+                                ${missingFields.map(field => `<li>${field} is required</li>`).join('')}
+                            </ul>
+                        `;
+                        
+                        showBootstrapAlertHtml(messageHtml, 'Required Information Missing', 'warning');
+                        return Promise.reject('Form validation failed');
                     }
                     
                     const discountPercent = selectedItem.discount_percent || 0;
@@ -1892,9 +1925,15 @@
                 },
                 
                 onError: function(err) {
-                    showBootstrapAlert('Payment failed. Please try again or contact support.', 'Payment Error', 'error');
-                    // Reinitialize PayPal buttons
-                    initializePayPal();
+                    console.log('PayPal Error:', err);
+                    // Only show generic error for actual PayPal errors, not validation failures
+                    if (err && !err.toString().includes('validation') && !err.toString().includes('selected')) {
+                        showBootstrapAlert('Payment processing failed. Please try again or contact support if the problem persists.', 'Payment Error', 'error');
+                    }
+                    // Always reinitialize PayPal buttons for responsiveness
+                    setTimeout(() => {
+                        initializePayPal();
+                    }, 100);
                 },
                 
                 onCancel: function(data) {
@@ -1933,8 +1972,8 @@
             const customerData = {
                 name: DOM.customerName.value.trim(),
                 email: DOM.customerEmail.value.trim(),
-                phone: DOM.customerPhone.value.trim(),
                 giftRecipient: DOM.giftRecipient.value.trim(),
+                giftFrom: DOM.giftFrom.value.trim(),
                 giftMessage: DOM.giftMessage.value.trim()
             };
             
@@ -1952,8 +1991,8 @@
                 customer: {
                     name: customerData.name,
                     email: customerData.email,
-                    phone: customerData.phone,
                     gift_recipient: customerData.giftRecipient,
+                    gift_from: customerData.giftFrom,
                     gift_message: customerData.giftMessage
                 },
                 payment: {

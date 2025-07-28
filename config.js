@@ -12,7 +12,7 @@ const CONFIG = {
     // For sandbox testing, use sandbox client ID and environment
     // For production, use live client ID and environment
     PAYPAL: {
-        CLIENT_ID: 'Adso4sTVWJuYY1cSvqhhtzgX14KG5vKtESOkv1cptmHOBcNd6jtCKrFE2VPKr66f8pUaVmuBVhYP_Yau', // Replace with your sandbox Client ID
+        CLIENT_ID: 'Adso4sTVWJuYY1cSvqhhtzgX14KG5vKtESOkv1cptmHOBcNd6jtCKrFE2VPKr66f8pUaVmuBVhYP_Yau', 
         ENVIRONMENT: 'sandbox', // 'sandbox' or 'production'
         CURRENCY: 'AUD'
     },
