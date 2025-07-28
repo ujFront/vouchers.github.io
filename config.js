@@ -6,7 +6,7 @@
 const CONFIG = {
     // Google Apps Script Web App URL
     // Replace YOUR_SCRIPT_ID with your actual Google Apps Script ID
-    API_BASE_URL: 'https://script.google.com/macros/s/AKfycbzAWoPcABuRpiBj1lGrDG4wwH6BnMg_kebG8qovPQWZLceiunJGWr9azUQ-Kn7_A8vF/exec',
+    API_BASE_URL: 'https://script.google.com/macros/s/AKfycbzHUiwsX2CX4ePTY1KMO7mdzmx-JELg0VCRgsM_rb8jM01R21FsMxZJW-K4TSUurDdb/exec',
     
     // PayPal Configuration
     // For sandbox testing, use sandbox client ID and environment
