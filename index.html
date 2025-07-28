@@ -1021,7 +1021,7 @@
                     </div>
                     
                     <small>83 Solomon Rd, Jandakot WA 6164 | (08) 6397 0411 | <a href="mailto:admin@urbanjungleirc.com" style="color: #bbb;">admin@urbanjungleirc.com</a></small>
-                    <p class="my-0"><small>v 3.22.4</small></p>
+                    <p class="my-0"><small>3.22.4 - i06</small></p>
                 </div>
             </div>
         </div>
@@ -1087,6 +1087,46 @@
         let selectedItem = null;
         let purchaseLimit = null;
         
+        // DOM element cache for performance
+        const DOM = {
+            loadingSpinner: null,
+            errorMessage: null,
+            voucherContent: null,
+            voucherItems: null,
+            summaryContent: null,
+            paypalContainer: null,
+            purchaseSummary: null,
+            processingSpinner: null,
+            customerForm: null,
+            customerName: null,
+            customerEmail: null,
+            customerPhone: null,
+            giftRecipient: null,
+            giftMessage: null,
+            successMessage: null,
+            successEmail: null,
+            
+            // Initialize DOM cache
+            init: function() {
+                this.loadingSpinner = document.querySelector('.loading-spinner');
+                this.errorMessage = document.querySelector('.error-message');
+                this.voucherContent = document.getElementById('voucher-content');
+                this.voucherItems = document.getElementById('voucher-items');
+                this.summaryContent = document.getElementById('summary-content');
+                this.paypalContainer = document.getElementById('paypal-button-container');
+                this.purchaseSummary = document.getElementById('purchase-summary');
+                this.processingSpinner = document.getElementById('processing-spinner');
+                this.customerForm = document.getElementById('customer-form');
+                this.customerName = document.getElementById('customer-name');
+                this.customerEmail = document.getElementById('customer-email');
+                this.customerPhone = document.getElementById('customer-phone');
+                this.giftRecipient = document.getElementById('gift-recipient');
+                this.giftMessage = document.getElementById('gift-message');
+                this.successMessage = document.querySelector('.success-message');
+                this.successEmail = document.getElementById('success-email');
+            }
+        };
+        
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             initializeApp();
@@ -1094,13 +1134,19 @@
         
         // Initialize application
         function initializeApp() {
+            // Initialize DOM cache first
+            DOM.init();
+            
+            // Setup event listeners
+            setupFormValidation();
+            setupEventListeners();
+            
             // Load external scripts
             loadAnalytics();
             loadPayPalSDK();
             
             // Initialize page
             loadVoucherData();
-            setupFormValidation();
         }
         
         // Load analytics
@@ -1141,70 +1187,88 @@
             }
         }
         
-        // Load PayPal SDK
+        // Load PayPal SDK with deduplication
         function loadPayPalSDK() {
-            if (CONFIG.PAYPAL.CLIENT_ID !== 'YOUR_PAYPAL_CLIENT_ID') {
+            if (CONFIG.PAYPAL.CLIENT_ID !== 'YOUR_PAYPAL_CLIENT_ID' && !window.paypalSDKLoaded) {
+                window.paypalSDKLoaded = true;
                 const paypalScript = document.createElement('script');
                 paypalScript.src = `https://www.paypal.com/sdk/js?client-id=${CONFIG.PAYPAL.CLIENT_ID}&currency=${CONFIG.PAYPAL.CURRENCY}`;
                 paypalScript.onload = function() {
-                    };
+                    window.paypalSDKReady = true;
+                };
                 paypalScript.onerror = function() {
-                    };
+                    window.paypalSDKLoaded = false;
+                };
                 document.head.appendChild(paypalScript);
             }
         }
         
-        // JSONP helper function for cross-origin requests with enhanced debugging
-        function jsonpRequest(url, callback) {
-            // Use a unique callback name to avoid conflicts
-            const callbackName = 'jsonpCallback_' + Date.now();
+        // Unified API request function with caching and error handling
+        const ApiClient = {
+            cache: new Map(),
             
-            // Create the URL with callback parameter
-            const scriptUrl = url + (url.includes('?') ? '&' : '?') + 'callback=' + callbackName;
-            
-            
-            // Create script element
-            const script = document.createElement('script');
-            script.src = scriptUrl;
-            script.async = true;
-            
-            // Add timeout protection for JSONP
-            const timeoutId = setTimeout(function() {
-                callback(new Error('JSONP request timed out'));
-                // Clean up
-                if (document.head.contains(script)) {
-                    document.head.removeChild(script);
+            async makeRequest(url, options = {}) {
+                const cacheKey = url + JSON.stringify(options);
+                const cacheTTL = options.cacheTTL || 0; // Default no cache
+                
+                // Check cache first
+                if (cacheTTL > 0 && this.cache.has(cacheKey)) {
+                    const cached = this.cache.get(cacheKey);
+                    if (Date.now() - cached.timestamp < cacheTTL) {
+                        return cached.data;
+                    }
+                    this.cache.delete(cacheKey);
                 }
-                delete window[callbackName];
-            }, 10000); // 10 second timeout
-            
-            // Set up global callback
-            window[callbackName] = function(data) {
-                clearTimeout(timeoutId);
-                console.log('JSONP success:', data);
-                callback(null, data);
-                // Clean up
-                if (document.head.contains(script)) {
-                    document.head.removeChild(script);
+                
+                // Make the request with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), options.timeout || 30000);
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        credentials: 'omit',
+                        signal: controller.signal,
+                        ...options
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const text = await response.text();
+                    let result;
+                    
+                    // Parse response (handles both JSONP and regular JSON)
+                    const jsonpMatch = text.match(/\w+\((.*)\);?$/);
+                    if (jsonpMatch) {
+                        result = JSON.parse(jsonpMatch[1]);
+                    } else {
+                        result = JSON.parse(text);
+                    }
+                    
+                    // Cache the result if cacheTTL is set
+                    if (cacheTTL > 0) {
+                        this.cache.set(cacheKey, {
+                            data: result,
+                            timestamp: Date.now()
+                        });
+                    }
+                    
+                    return result;
+                    
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    if (error.name === 'AbortError') {
+                        throw new Error('Request timed out');
+                    }
+                    throw error;
                 }
-                delete window[callbackName];
-            };
-            
-            // Handle script loading errors
-            script.onerror = function(error) {
-                clearTimeout(timeoutId);
-                callback(new Error('JSONP script load failed'));
-                // Clean up
-                if (document.head.contains(script)) {
-                    document.head.removeChild(script);
-                }
-                delete window[callbackName];
-            };
-            
-            
-            // Add script to head to trigger request
-            document.head.appendChild(script);
-        }
+            }
+        };
         
         // Load voucher data based on promo_id or fallback to default
         function loadVoucherData() {
@@ -1223,90 +1287,29 @@
         
         
         // Load default voucher type (first available)
-        function loadDefaultVoucherType() {
+        async function loadDefaultVoucherType() {
             showLoading();
             
-            // Call API to get first available voucher type
-            const apiUrl = `${CONFIG.API_BASE_URL}?action=getDefaultCustomerVoucherData`;
-            
-            fetch(apiUrl, {
-                method: 'GET',
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json',
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return response.text();
-            })
-            .then(text => {
-                // Handle JSONP response (extract JSON from callback)
-                if (text.startsWith('callback(')) {
-                    const jsonStart = text.indexOf('(') + 1;
-                    const jsonEnd = text.lastIndexOf(')');
-                    const jsonString = text.substring(jsonStart, jsonEnd);
-                    const data = JSON.parse(jsonString);
-                    handleVoucherDataSuccess(data, true); // true indicates this is default fallback
-                } else {
-                    // Try to parse as regular JSON
-                    try {
-                        const data = JSON.parse(text);
-                        handleVoucherDataSuccess(data, true); // true indicates this is default fallback
-                    } catch (e) {
-                        handleVoucherDataError(new Error('Invalid response format'));
-                    }
-                }
-            })
-            .catch(error => {
-                // If default API fails, show user-friendly error
+            try {
+                const apiUrl = `${CONFIG.API_BASE_URL}?action=getDefaultCustomerVoucherData`;
+                const data = await ApiClient.makeRequest(apiUrl, { cacheTTL: 60000 }); // Cache for 1 minute
+                handleVoucherDataSuccess(data, true);
+            } catch (error) {
                 handleDefaultVoucherError(error);
-            });
+            }
         }
         
         // Load voucher data for specific promo ID
-        function loadVoucherDataByPromoId(promoId) {
+        async function loadVoucherDataByPromoId(promoId) {
             showLoading();
             
-            // Call Google Apps Script API - using same approach as working test-api.html
-            const apiUrl = `${CONFIG.API_BASE_URL}?action=getCustomerVoucherData&promoId=${promoId}`;
-            
-            fetch(apiUrl, {
-                method: 'GET',
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json',
-                }
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                return response.text();
-            })
-            .then(text => {
-                // Handle JSONP response (extract JSON from callback)
-                if (text.startsWith('callback(')) {
-                    const jsonStart = text.indexOf('(') + 1;
-                    const jsonEnd = text.lastIndexOf(')');
-                    const jsonString = text.substring(jsonStart, jsonEnd);
-                    const data = JSON.parse(jsonString);
-                    handleVoucherDataSuccess(data, false); // false indicates this is specific promo
-                } else {
-                    // Try to parse as regular JSON
-                    try {
-                        const data = JSON.parse(text);
-                        handleVoucherDataSuccess(data, false); // false indicates this is specific promo
-                    } catch (e) {
-                        handleVoucherDataError(new Error('Invalid response format'));
-                    }
-                }
-            })
-            .catch(error => {
+            try {
+                const apiUrl = `${CONFIG.API_BASE_URL}?action=getCustomerVoucherData&promoId=${promoId}`;
+                const data = await ApiClient.makeRequest(apiUrl, { cacheTTL: 300000 }); // Cache for 5 minutes
+                handleVoucherDataSuccess(data, false);
+            } catch (error) {
                 handleVoucherDataError(error);
-            });
+            }
         }
         
         // Handle successful voucher data loading
@@ -1334,7 +1337,7 @@
             
             
             // Show main content
-            document.getElementById('voucher-content').style.display = 'block';
+            DOM.voucherContent.style.display = 'block';
             
             // Initialize PayPal
             initializePayPal();
@@ -1466,11 +1469,10 @@
         
         // Display voucher items
         function displayVoucherItems() {
-            const container = document.getElementById('voucher-items');
-            container.innerHTML = '';
+            DOM.voucherItems.innerHTML = '';
             
             if (!voucherItems || voucherItems.length === 0) {
-                container.innerHTML = '<div class="col-12"><p class="text-muted">No voucher options available at this time.</p></div>';
+                DOM.voucherItems.innerHTML = '<div class="col-12"><p class="text-muted">No voucher options available at this time.</p></div>';
                 return;
             }
             
@@ -1510,7 +1512,7 @@
                     </div>
                 `;
                 
-                container.innerHTML += itemHtml;
+                DOM.voucherItems.innerHTML += itemHtml;
             });
         }
         
@@ -1566,19 +1568,16 @@
         
         // Update purchase summary
         function updatePurchaseSummary() {
-            const summaryContent = document.getElementById('summary-content');
-            const paypalContainer = document.getElementById('paypal-button-container');
-            const purchaseSummary = document.getElementById('purchase-summary');
             
             if (!selectedItem) {
-                summaryContent.innerHTML = `
+                DOM.summaryContent.innerHTML = `
                     <div class="text-muted text-center py-4">
                         <i class="bi bi-arrow-left fs-3 mb-3 d-block"></i>
                         <p class="mb-0">Please select a voucher option to see pricing</p>
                     </div>
                 `;
-                paypalContainer.style.display = 'none';
-                purchaseSummary.classList.remove('has-selection');
+                DOM.paypalContainer.style.display = 'none';
+                DOM.purchaseSummary.classList.remove('has-selection');
                 return;
             }
             
@@ -1609,9 +1608,9 @@
                 </div>
             `;
             
-            summaryContent.innerHTML = summaryHtml;
-            paypalContainer.style.display = 'block';
-            purchaseSummary.classList.add('has-selection');
+            DOM.summaryContent.innerHTML = summaryHtml;
+            DOM.paypalContainer.style.display = 'block';
+            DOM.purchaseSummary.classList.add('has-selection');
         }
         
         // Display terms and conditions
@@ -1699,14 +1698,48 @@
             return tempDiv.innerHTML;
         }
         
-        // Setup form validation
-        function setupFormValidation() {
-            const form = document.getElementById('customer-form');
-            const inputs = form.querySelectorAll('input, textarea');
+        // Centralized event management
+        const EventManager = {
+            listeners: new Map(),
             
-            inputs.forEach(input => {
-                input.addEventListener('blur', () => validateField(input));
-                input.addEventListener('input', () => clearFieldValidation(input));
+            add(element, event, handler, options = {}) {
+                const key = `${element}_${event}`;
+                if (this.listeners.has(key)) {
+                    element.removeEventListener(event, this.listeners.get(key));
+                }
+                
+                element.addEventListener(event, handler, options);
+                this.listeners.set(key, handler);
+            },
+            
+            remove(element, event) {
+                const key = `${element}_${event}`;
+                if (this.listeners.has(key)) {
+                    element.removeEventListener(event, this.listeners.get(key));
+                    this.listeners.delete(key);
+                }
+            },
+            
+            removeAll() {
+                this.listeners.clear();
+            }
+        };
+        
+        // Setup form validation with optimized event handling
+        function setupFormValidation() {
+            const inputs = DOM.customerForm.querySelectorAll('input, textarea');
+            
+            // Use event delegation for better performance
+            EventManager.add(DOM.customerForm, 'focusout', (e) => {
+                if (e.target.matches('input, textarea')) {
+                    validateField(e.target);
+                }
+            });
+            
+            EventManager.add(DOM.customerForm, 'input', (e) => {
+                if (e.target.matches('input, textarea')) {
+                    clearFieldValidation(e.target);
+                }
             });
         }
         
@@ -1782,8 +1815,7 @@
         
         // Validate entire form
         function validateForm() {
-            const form = document.getElementById('customer-form');
-            const inputs = form.querySelectorAll('input[required], textarea[required]');
+            const inputs = DOM.customerForm.querySelectorAll('input[required], textarea[required]');
             let isValid = true;
             
             inputs.forEach(input => {
@@ -1874,65 +1906,39 @@
         
         // Show processing spinner
         function showProcessingSpinner() {
-            const spinner = document.getElementById('processing-spinner');
-            if (spinner) {
-                spinner.style.display = 'flex';
+            if (DOM.processingSpinner) {
+                DOM.processingSpinner.style.display = 'flex';
             }
         }
         
         // Hide processing spinner
         function hideProcessingSpinner() {
-            const spinner = document.getElementById('processing-spinner');
-            if (spinner) {
-                spinner.style.display = 'none';
+            if (DOM.processingSpinner) {
+                DOM.processingSpinner.style.display = 'none';
             }
         }
         
         // Process purchase success
-        function processPurchaseSuccess(paymentDetails) {
+        async function processPurchaseSuccess(paymentDetails) {
+            // Prevent duplicate processing
+            if (window.isProcessingPurchase) {
+                console.warn('Purchase already being processed, ignoring duplicate call');
+                return;
+            }
+            window.isProcessingPurchase = true;
             
             // Show processing spinner immediately
             showProcessingSpinner();
             
             const customerData = {
-                name: document.getElementById('customer-name').value.trim(),
-                email: document.getElementById('customer-email').value.trim(),
-                phone: document.getElementById('customer-phone').value.trim(),
-                giftRecipient: document.getElementById('gift-recipient').value.trim(),
-                giftMessage: document.getElementById('gift-message').value.trim()
+                name: DOM.customerName.value.trim(),
+                email: DOM.customerEmail.value.trim(),
+                phone: DOM.customerPhone.value.trim(),
+                giftRecipient: DOM.giftRecipient.value.trim(),
+                giftMessage: DOM.giftMessage.value.trim()
             };
             
-            // CRITICAL FIX: Ensure data structure matches backend expectations
-            const purchaseData = {
-                voucherType: {
-                    ...voucherType
-                    // type_id field already exists from getCustomerVoucherData
-                },
-                voucherItem: selectedItem,
-                customer: {
-                    ...customerData,
-                    // Map frontend field names to backend expectations
-                    gift_recipient: customerData.giftRecipient,
-                    gift_message: customerData.giftMessage
-                },
-                payment: {
-                    ...paymentDetails,
-                    // Ensure required payment fields exist
-                    id: paymentDetails.id || paymentDetails.orderID,
-                    orderID: paymentDetails.orderID || paymentDetails.id
-                },
-                promoId: new URLSearchParams(window.location.search).get('promoID')
-            };
-            
-            
-            // Add timeout protection
-            const timeoutId = setTimeout(function() {
-                hideProcessingSpinner();
-                handlePurchaseError(new Error('Request timed out. Please contact support if payment was charged.'));
-            }, 30000);
-            
-            
-            // Create essential purchase data for JSONP (remove large fields to stay under URL limits)
+            // Create essential purchase data for API
             const essentialData = {
                 voucherType: {
                     type_id: voucherType.type_id,
@@ -1957,80 +1963,41 @@
                 promoId: new URLSearchParams(window.location.search).get('promoID')
             };
             
-            
-            // Encode essential data as URL parameters for JSONP
+            // Encode data for API call
             const encodedData = encodeURIComponent(JSON.stringify(essentialData));
-            const jsonpUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
+            const apiUrl = `${CONFIG.API_BASE_URL}?action=processCustomerPurchase&data=${encodedData}`;
             
+            // Single request with timeout protection
+            const timeoutId = setTimeout(function() {
+                window.isProcessingPurchase = false;
+                hideProcessingSpinner();
+                handlePurchaseError(new Error('Request timed out. Please contact support if payment was charged.'));
+            }, 30000);
             
-            jsonpRequest(jsonpUrl, function(error, result) {
+            // Use ApiClient for consistent request handling
+            try {
+                const result = await ApiClient.makeRequest(apiUrl);
                 clearTimeout(timeoutId);
-                
-                if (error) {
-                    
-                    // Fallback to GET request without script loading (avoids CSP issues)
-                    fetch(jsonpUrl, {
-                        method: 'GET',
-                        mode: 'cors',
-                        credentials: 'omit'
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                        }
-                        return response.text();
-                    })
-                    .then(text => {
-                        
-                        // Try multiple JSONP response patterns
-                        let match = text.match(/(\w+)\((.*)\);?$/); // Generic callback pattern first
-                        if (!match) {
-                            // Try timestamp-based callback pattern
-                            match = text.match(/jsonpCallback_\d+\((.*)\);?$/);
-                        }
-                        if (!match) {
-                            // Try without callback (direct JSON)
-                            try {
-                                const result = JSON.parse(text);
-                                hideProcessingSpinner();
-                                handlePurchaseSuccess(result);
-                                return;
-                            } catch (e) {
-                            }
-                        }
-                        
-                        if (match) {
-                            try {
-                                const result = JSON.parse(match[2]);
-                                hideProcessingSpinner();
-                                handlePurchaseSuccess(result);
-                            } catch (parseError) {
-                                throw parseError;
-                            }
-                        } else {
-                            throw new Error('Invalid response format - see console for details');
-                        }
-                    })
-                    .catch(fetchError => {
-                        hideProcessingSpinner();
-                        handlePurchaseError(new Error('Purchase request failed: ' + fetchError.message));
-                    });
-                } else {
-                    hideProcessingSpinner();
-                    handlePurchaseSuccess(result);
-                }
-            });
+                window.isProcessingPurchase = false;
+                hideProcessingSpinner();
+                handlePurchaseSuccess(result);
+            } catch (error) {
+                clearTimeout(timeoutId);
+                window.isProcessingPurchase = false;
+                hideProcessingSpinner();
+                handlePurchaseError(new Error('Purchase request failed: ' + error.message));
+            }
         }
         
         // Handle purchase success
         function handlePurchaseSuccess(result) {
             if (result && result.success) {
                 // Hide voucher content
-                document.getElementById('voucher-content').style.display = 'none';
+                DOM.voucherContent.style.display = 'none';
                 
                 // Show success message
-                document.querySelector('.success-message').style.display = 'block';
-                document.getElementById('success-email').textContent = document.getElementById('customer-email').value;
+                DOM.successMessage.style.display = 'block';
+                DOM.successEmail.textContent = DOM.customerEmail.value;
                 
                 // Track conversion
                 if (typeof gtag !== 'undefined') {
@@ -2095,75 +2062,93 @@
         
         // Enhanced loading experience with multi-stage animation designed to mitigate GAS delays
         function showLoading() {
-            document.querySelector('.loading-spinner').style.display = 'block';
-            document.querySelector('.error-message').style.display = 'none';
-            document.getElementById('voucher-content').style.display = 'none';
+            DOM.loadingSpinner.style.display = 'block';
+            DOM.errorMessage.style.display = 'none';
+            DOM.voucherContent.style.display = 'none';
             
             // Start engaging loading animation
             startLoadingAnimation();
         }
         
-        // Multi-stage loading animation designed to keep users engaged during GAS delays
+        // Optimized loading animation with better performance
+        let loadingAnimationId = null;
+        let loadingCancelled = false;
+        
         function startLoadingAnimation() {
             const progressBar = document.getElementById('loading-progress');
             const loadingStage = document.getElementById('loading-stage');
             
+            if (!progressBar || !loadingStage) return;
+            
+            loadingCancelled = false;
+            let currentStage = 0;
+            let progress = 0;
+            const startTime = Date.now();
+            
             const stages = [
-                { progress: 12, message: '🔍 Searching for your perfect climbing experience...', delay: 800 },
-                { progress: 28, message: '🏔️ Exploring our climbing wall configurations...', delay: 900 },
-                { progress: 45, message: '💰 Calculating the best prices for you...', delay: 750 },
-                { progress: 62, message: '🎁 Preparing your adventure voucher options...', delay: 850 },
-                { progress: 78, message: '🛡️ Setting up secure payment processing...', delay: 700 },
-                { progress: 92, message: '✨ Adding the finishing touches...', delay: 600 },
-                { progress: 100, message: '🎉 Ready to climb!', delay: 400 }
+                { progress: 20, message: '🔍 Loading your adventure options...', duration: 1000 },
+                { progress: 50, message: '💰 Calculating prices...', duration: 800 },
+                { progress: 80, message: '🎁 Preparing vouchers...', duration: 600 },
+                { progress: 95, message: '✨ Almost ready...', duration: 400 }
             ];
             
-            let currentStage = 0;
-            
-            function nextStage() {
-                if (currentStage < stages.length) {
-                    const stage = stages[currentStage];
-                    
-                    // Update progress bar with smooth transition
-                    progressBar.style.width = stage.progress + '%';
-                    
-                    // Update message with fade effect
-                    loadingStage.style.opacity = '0.6';
-                    setTimeout(() => {
-                        loadingStage.innerHTML = `<p class="mb-2 fw-bold">${stage.message}</p>`;
-                        loadingStage.style.opacity = '1';
-                    }, 150);
-                    
-                    currentStage++;
-                    
-                    // Schedule next stage
-                    setTimeout(nextStage, stage.delay);
+            function animate() {
+                if (loadingCancelled) return;
+                
+                const elapsed = Date.now() - startTime;
+                const targetStage = stages.find(s => elapsed < s.duration * (stages.indexOf(s) + 1)) || stages[stages.length - 1];
+                
+                // Smooth progress interpolation
+                const targetProgress = targetStage.progress;
+                progress += (targetProgress - progress) * 0.1;
+                
+                progressBar.style.width = Math.min(95, progress) + '%';
+                
+                // Update message when stage changes
+                const stageIndex = stages.indexOf(targetStage);
+                if (stageIndex !== currentStage && stageIndex >= 0) {
+                    currentStage = stageIndex;
+                    loadingStage.innerHTML = `<p class="mb-2 fw-bold">${targetStage.message}</p>`;
+                }
+                
+                // Continue animation if not at final stage
+                if (progress < 95 && !loadingCancelled) {
+                    loadingAnimationId = requestAnimationFrame(animate);
                 }
             }
             
-            // Start the animation immediately
-            nextStage();
+            loadingAnimationId = requestAnimationFrame(animate);
+        }
+        
+        // Cancel loading animation
+        function stopLoadingAnimation() {
+            loadingCancelled = true;
+            if (loadingAnimationId) {
+                cancelAnimationFrame(loadingAnimationId);
+                loadingAnimationId = null;
+            }
         }
         
         // Hide loading state
         function hideLoading() {
-            document.querySelector('.loading-spinner').style.display = 'none';
+            stopLoadingAnimation();
+            DOM.loadingSpinner.style.display = 'none';
         }
         
         // Show error message
         function showError(message) {
             document.getElementById('error-text').textContent = message;
-            document.querySelector('.error-message').style.display = 'block';
-            document.querySelector('.loading-spinner').style.display = 'none';
-            document.getElementById('voucher-content').style.display = 'none';
+            DOM.errorMessage.style.display = 'block';
+            DOM.loadingSpinner.style.display = 'none';
+            DOM.voucherContent.style.display = 'none';
         }
         
         // Show error message with HTML formatting
         function showErrorHtml(htmlContent) {
             document.getElementById('error-text').innerHTML = htmlContent;
-            document.querySelector('.error-message').style.display = 'block';
-            document.querySelector('.loading-spinner').style.display = 'none';
-            document.getElementById('voucher-content').style.display = 'none';
+            DOM.errorMessage.style.display = 'block';
+            DOM.loadingSpinner.style.display = 'none';
+            DOM.voucherContent.style.display = 'none';
         }
         
         // Show PayPal error (fallback)
@@ -2175,11 +2160,11 @@
             );
         }
         
-        // Smooth scroll to voucher selection
-        document.addEventListener('DOMContentLoaded', function() {
+        // Setup additional event listeners
+        function setupEventListeners() {
             const ctaButton = document.querySelector('.hero-cta');
             if (ctaButton) {
-                ctaButton.addEventListener('click', function(e) {
+                EventManager.add(ctaButton, 'click', function(e) {
                     e.preventDefault();
                     const target = document.querySelector('#voucher-selection');
                     if (target) {
@@ -2187,7 +2172,7 @@
                     }
                 });
             }
-        });
+        }
     </script>
 </body>
 </html>
