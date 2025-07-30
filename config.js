@@ -5,15 +5,12 @@
 
 const CONFIG = {
     // Google Apps Script Web App URL
-    // Replace YOUR_SCRIPT_ID with your actual Google Apps Script ID
     API_BASE_URL: 'https://script.google.com/a/macros/urbanjungleirc.com/s/AKfycbx8PuMRNkD4V2BarWdGalbUntUtE6YmrW-oGzxWX3xI65XcWJYw0Ne7u2LT68ZaMXbx/exec',
     
     // PayPal Configuration
-    // For sandbox testing, use sandbox client ID and environment
-    // For production, use live client ID and environment
     PAYPAL: {
-        CLIENT_ID: 'Adso4sTVWJuYY1cSvqhhtzgX14KG5vKtESOkv1cptmHOBcNd6jtCKrFE2VPKr66f8pUaVmuBVhYP_Yau', 
-        ENVIRONMENT: 'sandbox', // 'sandbox' or 'production'
+        CLIENT_ID: 'AZaTcMnAUIIxeMgMUbRBzmX_Jr1XpwzxNZLuCUWZ51aB6XKyB0iwIw2LnoJwFEkBGMdAxPJTBzM_WJCP', 
+        ENVIRONMENT: 'production', // 'sandbox' or 'production'
         CURRENCY: 'AUD'
     },
     
