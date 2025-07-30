@@ -17,13 +17,13 @@ const CONFIG = {
     // Analytics Configuration
     ANALYTICS: {
         // Google Tag Manager ID
-        GTM_ID: 'GTM-XXXXXXX',
+        GTM_ID: 'GTM-NP52DRP3',
         
         // Google Analytics 4 Measurement ID
         GA4_ID: 'G-XXXXXXXXXX',
         
         // Facebook Pixel ID
-        FB_PIXEL_ID: 'XXXXXXXXXXXXXXX'
+        FB_PIXEL_ID: '874916414055399'
     },
     
     // Company Information
